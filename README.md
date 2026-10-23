@@ -55,6 +55,10 @@ DNS_SERVERS=1.1.1.1,8.8.8.8
 | `POST` | `/api/payment` | Publik | Membuat pembayaran Midtrans dari daftar item. |
 | `GET` | `/api/checkpayment/:transactionId` | Publik | Meminta status transaksi dari Midtrans. |
 | `POST` | `/api/transactions` | Publik | Membuat transaksi Snap dan menyimpannya ke MongoDB. |
+| `GET` | `/api/games` | Publik | Mengambil daftar game; mendukung `?jenis=joki` atau `?jenis=gift`. |
+| `POST` | `/api/games` | JWT admin | Menambah game beserta slug, gambar, dan kategori katalog. |
+| `PUT` | `/api/games/:id` | JWT admin | Memperbarui data game. |
+| `DELETE` | `/api/games/:id` | JWT admin | Menghapus game yang belum memiliki produk terkait. |
 
 Untuk endpoint yang memerlukan JWT, kirim header:
 

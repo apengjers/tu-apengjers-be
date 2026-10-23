@@ -1,8 +1,21 @@
 const Product = require('../models/Product');
+const Game = require('../models/Game');
+
+const validateCatalogGame = async (body, res) => {
+  if (!['joki', 'gift'].includes(body.jenis)) return true;
+  if (!body.game && body.jenis === 'gift') return true;
+  const game = body.game ? await Game.findById(body.game) : null;
+  if (!game || (body.jenis === 'joki' && !['joki', undefined].includes(game.jenis)) || (body.jenis === 'gift' && game.jenis !== 'gift')) {
+    res.status(400).json({ message: 'Pilih game yang terdaftar pada kategori produk yang sesuai' });
+    return false;
+  }
+  return true;
+};
 
 // Create Product
 exports.createProduct = async (req, res) => {
   try {
+    if (!(await validateCatalogGame(req.body, res))) return;
     const product = new Product(req.body);
     await product.save();
     res.json(product);
@@ -15,7 +28,7 @@ exports.createProduct = async (req, res) => {
 exports.getProducts = async (req, res) => {
   try {
     const filter = req.query.jenis ? { jenis: req.query.jenis } : {};
-    const products = await Product.find(filter);
+    const products = await Product.find(filter).populate('game');
     res.json(products);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -25,7 +38,7 @@ exports.getProducts = async (req, res) => {
 // Get Single Product
 exports.getProductById = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id);
+    const product = await Product.findById(req.params.id).populate('game');
     if (!product) return res.status(404).json({ message: 'Not found' });
     res.json(product);
   } catch (err) {
@@ -36,7 +49,12 @@ exports.getProductById = async (req, res) => {
 // Update Product
 exports.updateProduct = async (req, res) => {
   try {
-    const updated = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const current = await Product.findById(req.params.id);
+    if (!current) return res.status(404).json({ message: 'Not found' });
+    const nextProduct = { ...current.toObject(), ...req.body };
+    if (!(await validateCatalogGame(nextProduct, res))) return;
+    const updated = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+    if (!updated) return res.status(404).json({ message: 'Not found' });
     res.json(updated);
   } catch (err) {
     res.status(500).json({ message: err.message });

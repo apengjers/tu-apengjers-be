@@ -23,11 +23,13 @@ const authRoutes = require('./routes/authRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const productRoutes = require('./routes/productRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
+const gameRoutes = require('./routes/gameRoutes');
 
 app.use('/auth', authRoutes);
 app.use('/api', paymentRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/transactions', transactionRoutes);
+app.use('/api/games', gameRoutes);
 
 // Start server
 app.listen(PORT, () => {
