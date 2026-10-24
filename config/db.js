@@ -12,12 +12,21 @@ if (configuredDnsServers.length) {
 }
 
 const connectDB = async () => {
-  try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI);
-    console.log("✅ Terhubung ke MongoDB:", conn.connection.host);
-  } catch (err) {
-    console.error("❌ MongoDB connection error:", err.message);
-    process.exit(1); // Keluar dari aplikasi jika gagal konek
+  const maxAttempts = 4;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const conn = await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 10000 });
+      console.log("✅ Terhubung ke MongoDB:", conn.connection.host);
+      return conn;
+    } catch (err) {
+      console.error(`❌ MongoDB connection attempt ${attempt}/${maxAttempts} failed:`, err.message);
+      if (attempt === maxAttempts) {
+        process.exit(1);
+      }
+      const delayMs = 1000 * (2 ** (attempt - 1));
+      console.log(`Mencoba konek lagi dalam ${delayMs / 1000} detik…`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
   }
 };
 
