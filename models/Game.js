@@ -5,6 +5,8 @@ const gameSchema = new mongoose.Schema({
   slug: { type: String, required: true, trim: true, lowercase: true, match: /^[a-z0-9]+(?:-[a-z0-9]+)*$/ },
   gambar: { type: String, default: '' },
   jenis: { type: String, enum: ['joki', 'gift'], default: 'joki' },
+  isFeatured: { type: Boolean, default: false },
+  featuredOrder: { type: Number, default: 0 },
 }, { timestamps: true });
 
 gameSchema.index({ jenis: 1, slug: 1 }, { unique: true });
