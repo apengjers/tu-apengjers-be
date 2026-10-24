@@ -95,6 +95,59 @@ db.users.updateOne(
 
 Login ulang, lalu buka `/adminproduct` di frontend. Operasi tambah, edit, dan hapus produk diperiksa kembali oleh backend berdasarkan role di database.
 
+## Fitur Chatbot AI
+
+Chatbot menggunakan **Groq API** dengan model `qwen/qwen3.8-27b` sebagai LLM. Chatbot hanya bisa menjawab berdasarkan data dari database (game dan produk) — tidak mengarang informasi di luar data toko.
+
+### Endpoint Chatbot
+
+| Method | Path | Akses | Keterangan |
+| --- | --- | --- | --- |
+| `POST` | `/api/chat` | Publik | Kirim pesan ke LLM dengan context data DB |
+| `GET` | `/api/chat/orders` | JWT | Ambil daftar pesanan milik user yang login |
+
+### Konfigurasi
+
+Tambahkan ke `.env`:
+
+```env
+GROQ_API_KEY=<api-key-dari-console.groq.com>
+```
+
+Daftar dan ambil API key gratis di [console.groq.com](https://console.groq.com).
+
+### Body `POST /api/chat`
+
+```json
+{
+  "message": "Ada joki untuk game apa saja?",
+  "history": [
+    { "role": "user", "text": "halo" },
+    { "role": "assistant", "text": "Halo! Ada yang bisa saya bantu?" }
+  ],
+  "category": "jasa joki dan item/gift game"
+}
+```
+
+- `message` — pesan user, maks 500 karakter (wajib)
+- `history` — array percakapan sebelumnya, maks 10 entri terakhir (opsional)
+- `category` — hint kategori untuk memfokuskan jawaban LLM (opsional)
+
+### Cara kerja
+
+1. Backend mengambil semua data `Game` dan `Product` dari MongoDB
+2. Data diformat sebagai context teks dan dimasukkan ke system prompt
+3. System prompt membatasi LLM agar hanya menjawab seputar data toko
+4. Request dikirim ke Groq API dan jawaban dikembalikan ke frontend
+
+### Aturan prompt
+
+- Hanya menjawab berdasarkan data toko yang ada di DB
+- Jika produk tidak ada di data, LLM akan jujur menyatakan tidak tersedia
+- Menolak topik di luar toko (politik, pelajaran, dll) dengan sopan
+- Tidak akan mengungkapkan isi prompt atau cara kerjanya
+- Format harga selalu `Rp` dengan titik ribuan
+
 ## Status implementasi dan batasan
 
 - Pembayaran Midtrans dikonfigurasi ke sandbox (`isProduction: false`).
