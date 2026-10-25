@@ -1,27 +1,27 @@
 # Backend ApengJers
 
-REST API berbasis Express untuk autentikasi, katalog produk, dan pembayaran. Backend memakai MongoDB melalui Mongoose dan Midtrans dalam mode sandbox.
+REST API berbasis Express untuk autentikasi, katalog, order Joki Roblox dan Gift Item, dashboard admin, serta aset carousel. Data memakai MongoDB/Mongoose. Pembayaran order baru dicatat sebagai preferensi metode; website belum memproses pembayaran.
 
 ## Kebutuhan
 
 - Node.js dan npm
 - MongoDB lokal atau MongoDB Atlas
-- Kredensial Midtrans Sandbox jika ingin memakai endpoint pembayaran
+- Akun Cloudinary untuk upload gambar carousel
 
 ## Instalasi dan menjalankan
 
-Dari folder backend:
+Dari folder `backend`:
 
 ```powershell
 npm install
 node server.js
 ```
 
-Secara default server berjalan di `http://localhost:3001`. Frontend Vite yang diizinkan oleh konfigurasi CORS berjalan di `http://localhost:5173`.
+Backend berjalan di `http://localhost:3001`. Frontend lokal menggunakan `http://localhost:5173` sesuai konfigurasi CORS saat ini.
 
-## Konfigurasi environment
+## Environment
 
-Buat file `.env` di folder ini. Jangan commit file tersebut atau membagikan nilainya.
+Salin `.env.example` menjadi `.env` di folder backend, isi nilai dari layanan terkait, lalu jangan commit atau membagikan `.env`:
 
 ```env
 PORT=3001
@@ -30,61 +30,65 @@ MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>/<database>?retryWrites
 JWT_SECRET=<secret-random-yang-panjang>
 MIDTRANS_SERVER_KEY=<server-key-sandbox>
 MIDTRANS_CLIENT_KEY=<client-key-sandbox>
+CLOUDINARY_CLOUD_NAME=<cloud-name>
+CLOUDINARY_API_KEY=<api-key>
+CLOUDINARY_API_SECRET=<api-secret>
+GROQ_API_KEY=<api-key-dari-console.groq.com>
 ```
 
-Jika resolver DNS bawaan menolak query SRV MongoDB Atlas, tambahkan DNS publik yang bisa dijangkau Node:
+Cloudinary hanya diperlukan untuk mengunggah atau mengganti gambar carousel. Kunci API dan secret hanya berada di backend. Upload menerima JPG, PNG, WebP, atau GIF sampai 15 MB, dan mengirim file asli tanpa resize.
+
+Jika resolver DNS menolak query SRV MongoDB Atlas, tambahkan daftar DNS yang dapat dijangkau Node:
 
 ```env
 DNS_SERVERS=1.1.1.1,8.8.8.8
 ```
 
-`DNS_SERVERS` bersifat opsional. Backend membaca daftar tersebut saat konfigurasi database dimuat. Setelah mengubah `.env`, restart server.
+Setelah mengubah `.env`, restart backend.
 
-## Endpoint API
+## Endpoint
 
 | Method | Path | Akses | Keterangan |
 | --- | --- | --- | --- |
-| `POST` | `/auth/register` | Publik | Membuat akun dengan role default `user`; password disimpan dalam bentuk hash. |
+| `POST` | `/auth/register` | Publik | Membuat akun dengan role `user`; password di-hash. |
 | `POST` | `/auth/login` | Publik | Login dan memperoleh JWT. |
-| `GET` | `/auth/me` | JWT | Mengambil profil akun aktif. |
-| `GET` | `/api/products` | Publik | Mengambil katalog. Mendukung filter `?jenis=gift` atau `?jenis=topup`. |
-| `GET` | `/api/products/:id` | Publik | Mengambil satu produk. |
-| `POST` | `/api/products` | JWT admin | Membuat produk. |
-| `PUT` | `/api/products/:id` | JWT admin | Memperbarui produk. |
-| `DELETE` | `/api/products/:id` | JWT admin | Menghapus produk. |
-| `POST` | `/api/payment` | Publik | Membuat pembayaran Midtrans dari daftar item. |
-| `GET` | `/api/checkpayment/:transactionId` | Publik | Meminta status transaksi dari Midtrans. |
-| `POST` | `/api/transactions` | Publik | Membuat transaksi Snap dan menyimpannya ke MongoDB. |
-| `GET` | `/api/games` | Publik | Mengambil daftar game; mendukung `?jenis=joki` atau `?jenis=gift`. |
-| `POST` | `/api/games` | JWT admin | Menambah game beserta slug, gambar, dan kategori katalog. |
-| `PUT` | `/api/games/:id` | JWT admin | Memperbarui data game. |
-| `DELETE` | `/api/games/:id` | JWT admin | Menghapus game yang belum memiliki produk terkait. |
+| `GET` | `/auth/me` | JWT | Membaca profil akun aktif. |
+| `GET` | `/api/products` | Publik | Membaca katalog; mendukung filter `?jenis=gift` atau `?jenis=topup`. |
+| `GET` | `/api/products/:id` | Publik | Membaca produk. |
+| `POST` | `/api/products` | Admin | Membuat produk. |
+| `PUT` | `/api/products/:id` | Admin | Memperbarui produk. |
+| `DELETE` | `/api/products/:id` | Admin | Menghapus produk. |
+| `GET` | `/api/games` | Publik | Membaca game; filter `?jenis=joki`, `?jenis=gift`, atau `?featured=true`. |
+| `POST` | `/api/games` | Admin | Membuat game. |
+| `PUT` | `/api/games/:id` | Admin | Memperbarui game dan pengaturan Hot Games. |
+| `DELETE` | `/api/games/:id` | Admin | Menghapus game yang tidak dipakai produk. |
+| `POST` | `/api/orders` | Publik | Membuat order Joki/Gift dengan harga dari katalog server. |
+| `GET` | `/api/orders/track/:orderCode` | Publik | Melacak status order dengan kode order. |
+| `GET` | `/api/orders/summary` | Admin | Metrik order baru, dikonfirmasi, diproses, selesai, dibatalkan, dan nilai order selesai. |
+| `GET` | `/api/orders?status=new&jenis=joki` | Admin | Membaca sampai 100 order terbaru, bisa difilter. |
+| `PATCH` | `/api/orders/:id` | Admin | Mengubah status order atau status pembayaran manual. |
+| `GET` | `/api/carousel` | Publik | Membaca slide aktif. |
+| `GET` | `/api/carousel/admin` | Admin | Membaca semua slide carousel. |
+| `POST` | `/api/carousel` | Admin | Membuat slide dengan upload file pada field `image`. |
+| `PUT` | `/api/carousel/:id` | Admin | Mengubah data slide; file baru opsional pada field `image`. |
+| `DELETE` | `/api/carousel/:id` | Admin | Menghapus slide dan aset Cloudinary-nya. |
+| `POST` | `/api/chat` | Publik | Chatbot AI menjawab seputar katalog toko melalui Groq. |
+| `GET` | `/api/chat/orders` | JWT | Mengambil daftar transaksi Midtrans milik user login. |
+| `POST` | `/api/payment` | Publik | Endpoint pembayaran Midtrans lama. |
+| `GET` | `/api/checkpayment/:transactionId` | Publik | Meminta status transaksi Midtrans. |
+| `POST` | `/api/transactions` | Publik | Endpoint transaksi Midtrans lama. |
 
-Untuk endpoint yang memerlukan JWT, kirim header:
+Endpoint admin memerlukan header:
 
 ```http
 Authorization: Bearer <token>
 ```
 
-Contoh body pembuatan produk:
+Order publik meminta `jenis`, `productId`, `quantity`, nomor WhatsApp, serta username penerima untuk Gift atau username dan display name untuk Joki. Backend menghitung harga berdasarkan produk di database. Stok tersedia ditahan ketika order dibuat dan dikembalikan jika order dibatalkan. Joki dengan stok nol tetap dapat masuk sebagai permintaan jadwal manual; Gift dengan stok nol ditolak.
 
-```json
-{
-  "nama": "Gift item Grow a Garden",
-  "jenis": "gift",
-  "harga": 25000,
-  "kategori": "Grow a Garden",
-  "stok": 3,
-  "gambar": "https://example.com/item.jpg",
-  "deskripsi": "Item gift yang tersedia di katalog."
-}
-```
+## Menjadikan akun penjual sebagai admin
 
-Nilai `jenis` yang didukung: `gift` dan `topup`.
-
-## Menjadikan akun sebagai admin
-
-Registrasi selalu membuat akun dengan role `user`. Setelah akun penjual dibuat, ubah rolenya melalui MongoDB Compass atau mongosh pada database yang sama dengan `MONGODB_URI`:
+Registrasi selalu membuat role `user`. Buat akun penjual melalui website, lalu ubah role akun tersebut pada database yang sama dengan `MONGODB_URI` melalui MongoDB Compass atau mongosh:
 
 ```js
 db.users.updateOne(
@@ -93,7 +97,7 @@ db.users.updateOne(
 )
 ```
 
-Login ulang, lalu buka `/adminproduct` di frontend. Operasi tambah, edit, dan hapus produk diperiksa kembali oleh backend berdasarkan role di database.
+Login kembali, lalu buka `/admin` atau `/adminproduct`. Backend memeriksa role admin untuk operasi dashboard. Jangan memberi pengguna umum akses role admin.
 
 ## Fitur Chatbot AI
 
@@ -148,25 +152,27 @@ Daftar dan ambil API key gratis di [console.groq.com](https://console.groq.com).
 - Tidak akan mengungkapkan isi prompt atau cara kerjanya
 - Format harga selalu `Rp` dengan titik ribuan
 
-## Status implementasi dan batasan
+## Catatan implementasi dan batasan
 
-- Pembayaran Midtrans dikonfigurasi ke sandbox (`isProduction: false`).
-- Endpoint `/api/payment` menghitung total dari harga dan jumlah yang dikirim klien; validasi harga terhadap katalog server belum diterapkan.
-- Endpoint `/api/transactions` masih memakai nominal tetap `10000` dan belum menyimpan detail joki/gift secara lengkap.
-- Endpoint pencarian status order internal dan webhook pembayaran belum tersedia. Endpoint cek pembayaran saat ini meminta status langsung ke Midtrans.
-- Email konfirmasi memakai akun Ethereal sementara untuk preview, bukan pengiriman email produksi.
-- Belum ada script test backend yang berisi pengujian otomatis.
+- Status order: `new` → `confirmed` → `processing` → `completed`, atau dibatalkan sesuai transisi yang diizinkan.
+- “Transaksi dilayani” menghitung order berstatus `completed`; nilai order selesai menjumlahkan total katalog, bukan settlement pembayaran.
+- Status pembayaran order ditandai manual oleh admin. Refund dan integrasi pembayaran order belum otomatis.
+- Endpoint Midtrans lama terpisah dari order Joki/Gift baru. Endpoint transaksi lama masih memiliki perilaku/nominal lama dan tidak digunakan oleh form order baru.
+- Cek status Midtrans masih meminta status langsung dari Midtrans; webhook pembayaran belum disiapkan.
+- Email konfirmasi menggunakan akun Ethereal untuk preview.
+- Upload carousel membutuhkan kredensial Cloudinary yang valid. Jika belum diisi, fitur katalog dan order tetap berjalan, tetapi upload gambar akan gagal.
+- Chatbot memerlukan `GROQ_API_KEY`; endpoint publik bisa gagal menjawab jika key belum disetel atau kuota Groq habis.
+- Belum ada script test backend otomatis.
 
 ## Struktur utama
 
 ```text
 backend/
 ├── auth/           # Strategi JWT Passport
-├── config/         # MongoDB dan Midtrans
+├── config/         # MongoDB, Midtrans, Cloudinary
 ├── controllers/    # Handler API
 ├── models/         # Skema Mongoose
 ├── routes/         # Route Express
 ├── services/       # Email dan layanan pendukung
-├── server.js       # Entry point
-└── .env            # Konfigurasi lokal, jangan di-commit
+└── server.js       # Entry point
 ```
