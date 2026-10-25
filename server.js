@@ -2,15 +2,15 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const passport = require('passport');
-require('./auth/passport')(passport); // init JWT strategy
+require('./auth/passport')(passport); 
 
 const connectDB = require('./config/db');
-connectDB(); // koneksi MongoDB
+connectDB(); 
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
+
 app.use(cors({
   origin: 'http://localhost:5173',
   credentials: true,
@@ -18,7 +18,6 @@ app.use(cors({
 app.use(express.json());
 app.use(passport.initialize());
 
-// Routes
 const authRoutes = require('./routes/authRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const productRoutes = require('./routes/productRoutes');
