@@ -96,7 +96,56 @@ ${context}`;
   }
 };
 
-// POST /api/chat/orders — cek semua pesanan milik user yang login (protected)
+// POST /api/chat/extract-order — ekstrak info order dari pesan user pakai LLM
+exports.extractOrder = async (req, res) => {
+  const { message } = req.body;
+  if (!message) return res.status(400).json({ error: 'Pesan tidak boleh kosong.' });
+
+  try {
+    const prompt = `Ekstrak informasi order dari pesan berikut. Kembalikan HANYA JSON valid, tanpa penjelasan apapun.
+
+Pesan user: "${message}"
+
+Format JSON yang harus dikembalikan:
+{
+  "orderType": "joki" atau "gift" atau null,
+  "robloxUsername": "username yang disebutkan atau null",
+  "targetDetails": "deskripsi target/tujuan joki atau null",
+  "recipientUsername": "username penerima gift atau null",
+  "notes": "catatan tambahan atau null"
+}
+
+Contoh:
+- "orderin joki rank diamond buat akun zidan123" → {"orderType":"joki","robloxUsername":"zidan123","targetDetails":"rank diamond","recipientUsername":null,"notes":null}
+- "mau gift item ke username apeng456" → {"orderType":"gift","robloxUsername":null,"targetDetails":null,"recipientUsername":"apeng456","notes":null}
+- "joki roblox username: myuser123 target: max level" → {"orderType":"joki","robloxUsername":"myuser123","targetDetails":"max level","recipientUsername":null,"notes":null}`;
+
+    const groqRes = await axios.post(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        model: 'qwen/qwen3.8-27b',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 256,
+        temperature: 0.1,
+      },
+      {
+        headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+        timeout: 10000,
+      }
+    );
+
+    const raw = groqRes.data.choices?.[0]?.message?.content?.trim();
+    // Ambil JSON dari response (bersihkan kalau ada teks di luar JSON)
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return res.json({ extracted: null });
+
+    const extracted = JSON.parse(jsonMatch[0]);
+    return res.json({ extracted });
+  } catch (err) {
+    console.error('[ExtractOrder] Error:', err.response?.data || err.message);
+    return res.json({ extracted: null });
+  }
+};
 exports.myOrders = async (req, res) => {
   // req.user diisi oleh passport JWT middleware
   const email = req.user?.email;
