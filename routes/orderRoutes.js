@@ -19,6 +19,7 @@ router.put('/webhook-setting', ...adminOnly, orderController.updateWebhookSettin
 router.post('/webhook-setting/test', ...adminOnly, orderController.testWebhookSetting);
 
 router.get('/', ...adminOnly, orderController.getOrders);
+router.post('/:id/credentials', ...adminOnly, orderController.getOrderCredentials);
 router.patch('/:id', ...adminOnly, orderController.updateOrder);
 
 module.exports = router;

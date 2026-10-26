@@ -12,11 +12,12 @@ const PORT = process.env.PORT || 3001;
 
 
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, ''),
   credentials: true,
 }));
 app.use(express.json());
 app.use(passport.initialize());
+app.use('/api/midtrans', require('./routes/midtransRoutes'));
 
 const authRoutes = require('./routes/authRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');

@@ -11,6 +11,7 @@ exports.sendDiscordOrderNotification = async (order, eventType = 'ORDER_CREATED'
     if (!webhookUrl || !webhookUrl.startsWith('https://discord.com/api/webhooks/')) return;
     if (eventType === 'ORDER_CREATED' && config.discordNewOrder === false) return;
     if (eventType === 'ORDER_UPDATED' && config.discordOrderIssue === false) return;
+    if (eventType === 'ORDER_PAID' && config.discordNewOrder === false) return;
 
     const buyerName = order.jenis === 'joki'
       ? (order.displayName || order.robloxUsername)
@@ -26,6 +27,15 @@ exports.sendDiscordOrderNotification = async (order, eventType = 'ORDER_CREATED'
       content = [
         `@everyone Halo **APENGJERS** berikut data pesanan terbaru untuk toko kamu:`,
         `• Pesanan baru masuk [**${order.orderCode}**](<${FRONTEND_URL}/cek-transaksi>) ${order.productName} ${order.gameName || ''}`.trim(),
+      ].join('\n');
+    } else if (eventType === 'ORDER_PAID') {
+      content = [
+        `@everyone Halo **APENGJERS**, pembayaran pesanan sudah diterima ✅`,
+        `• Nomor Pesanan: [${order.orderCode}](<${FRONTEND_URL}/cek-transaksi>)`,
+        `• Nama Produk: ${order.productName}${order.gameName ? ` - ${order.gameName}` : ''}`,
+        `• Total: Rp ${Number(order.totalPrice).toLocaleString('id-ID')}`,
+        `• Metode: ${order.paymentType || '-'}`,
+        `• Nama Pembeli: ${buyerName || order.whatsapp}`,
       ].join('\n');
     } else {
       content = [
@@ -75,4 +85,4 @@ exports.sendDiscordStockNotification = async (product) => {
   } catch (error) {
     console.error('Gagal mengirim Discord webhook stok kosong:', error.message);
   }
-};
+};

@@ -7,6 +7,8 @@ const {
   sendDiscordOrderNotification,
   sendDiscordStockNotification,
 } = require('../services/discordWebhookService');
+const { PAYMENT_CHANNELS } = require('../services/midtransService');
+const { encryptPassword, decryptPassword, normalizeWhatsapp } = require('../services/orderCredentials');
 
 const allowedStatuses = {
   new: ['confirmed', 'cancelled'],
@@ -27,23 +29,31 @@ exports.createOrder = async (req, res) => {
       productId,
       quantity: rawQuantity,
       robloxUsername,
-      displayName,
+      robloxPassword,
       recipientUsername,
       whatsapp,
       contactEmail,
       notes,
       requestedPaymentMethod,
+      paymentChannel,
     } = req.body;
 
     const quantity = Number(rawQuantity);
-    const normalizedWhatsapp = String(whatsapp || '').replace(/[\s()-]/g, '');
+    const normalizedWhatsapp = normalizeWhatsapp(whatsapp);
     if (!['joki', 'gift'].includes(jenis)) return res.status(400).json({ message: 'Jenis order tidak valid' });
     if (!mongoose.isValidObjectId(productId)) return res.status(400).json({ message: 'Produk tidak valid' });
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) return res.status(400).json({ message: 'Jumlah harus antara 1 sampai 99' });
-    if (!/^\+?\d{8,15}$/.test(normalizedWhatsapp)) return res.status(400).json({ message: 'Nomor WhatsApp tidak valid' });
+    if (!normalizedWhatsapp) return res.status(400).json({ message: 'Gunakan nomor seluler Indonesia yang valid: 08…, 628…, atau +628… (10–13 digit dalam format 08).' });
     if (jenis === 'gift' && !String(recipientUsername || '').trim()) return res.status(400).json({ message: 'Username penerima wajib diisi' });
-    if (jenis === 'joki' && (!String(robloxUsername || '').trim() || !String(displayName || '').trim())) {
-      return res.status(400).json({ message: 'Username dan display name Roblox wajib diisi' });
+    if (jenis === 'joki' && (!String(robloxUsername || '').trim() || typeof robloxPassword !== 'string' || robloxPassword.length < 8 || robloxPassword.length > 200)) {
+      return res.status(400).json({ message: 'Username dan password Roblox (8–200 karakter) wajib diisi' });
+    }
+    const orderCode = `AJ-${crypto.randomBytes(16).toString('hex').toUpperCase()}`;
+    // Encrypt before reserving stock; missing key must never create an unfulfillable order.
+    let robloxPasswordEncrypted;
+    if (jenis === 'joki') {
+      try { robloxPasswordEncrypted = encryptPassword(robloxPassword, orderCode); }
+      catch { return res.status(503).json({ message: 'Penyimpanan kredensial belum dikonfigurasi. Hubungi admin.' }); }
     }
 
     const product = await Product.findOne({ _id: productId, jenis }).populate('game');
@@ -63,8 +73,11 @@ exports.createOrder = async (req, res) => {
       return res.status(409).json({ message: 'Gift sedang habis' });
     }
 
+    const paymentGroup = Object.keys(PAYMENT_CHANNELS).includes(requestedPaymentMethod) ? requestedPaymentMethod : undefined;
+    const channel = paymentGroup && PAYMENT_CHANNELS[paymentGroup].includes(paymentChannel) ? paymentChannel : '';
+
     const order = await Order.create({
-      orderCode: `AJ-${crypto.randomBytes(16).toString('hex').toUpperCase()}`,
+      orderCode,
       jenis,
       product: product._id,
       game: product.game?._id,
@@ -74,12 +87,13 @@ exports.createOrder = async (req, res) => {
       unitPrice: product.harga,
       totalPrice: product.harga * quantity,
       robloxUsername: String(robloxUsername || '').trim(),
-      displayName: String(displayName || '').trim(),
+      robloxPasswordEncrypted,
       recipientUsername: String(recipientUsername || '').trim(),
       whatsapp: normalizedWhatsapp,
       contactEmail: String(contactEmail || '').trim(),
       notes: String(notes || '').trim().slice(0, 1000),
-      requestedPaymentMethod: ['qris', 'bank', 'ewallet'].includes(requestedPaymentMethod) ? requestedPaymentMethod : undefined,
+      requestedPaymentMethod: paymentGroup,
+      paymentChannel: channel,
       stockReserved: reservedStock,
     });
 
@@ -109,8 +123,23 @@ exports.createOrder = async (req, res) => {
     if (reservedStock && reservedProductId) {
       await Product.updateOne({ _id: reservedProductId }, { $inc: { stok: Number(req.body.quantity) || 0 } }).catch(() => {});
     }
-    console.error('Gagal membuat order:', error);
+    console.error('Gagal membuat order:', error.name); // Never log validation payloads containing credentials.
     res.status(500).json({ message: 'Order belum berhasil disimpan' });
+  }
+};
+
+exports.getOrderCredentials = async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'ID order tidak valid' });
+    const order = await Order.findById(req.params.id).select('orderCode status paymentStatus +robloxPasswordEncrypted');
+    if (!order?.robloxPasswordEncrypted) return res.status(404).json({ message: 'Password tidak tersedia' });
+    if (order.paymentStatus !== 'paid' || !['confirmed', 'processing'].includes(order.status)) {
+      return res.status(409).json({ message: 'Password hanya tersedia untuk pesanan lunas yang sedang dikerjakan' });
+    }
+    res.json({ password: decryptPassword(order.robloxPasswordEncrypted, order.orderCode) });
+  } catch {
+    res.status(500).json({ message: 'Password gagal dibuka' });
   }
 };
 
@@ -165,6 +194,7 @@ exports.updateOrder = async (req, res) => {
       order.paymentStatus = paymentStatus;
       isChanged = true;
     }
+    if (['completed', 'cancelled'].includes(order.status)) order.robloxPasswordEncrypted = undefined;
     await order.save();
 
     if (isChanged) {
