@@ -55,10 +55,13 @@ exports.chat = async (req, res) => {
 
     const systemPrompt = `Kamu adalah asisten toko top-up game bernama ApengJers. Tugasmu adalah membantu pelanggan mengetahui informasi produk, harga, stok, dan layanan di toko ini.
 
+KONTEKS PENTING:
+ApengJers adalah toko yang menjual layanan joki dan gift item untuk game-game yang berjalan di platform ROBLOX. Semua game yang ada di data di bawah adalah game Roblox. Jadi jika user bertanya tentang "joki roblox" atau "game roblox", arahkan ke daftar game yang tersedia di data.
+
 TOPIK YANG BOLEH DIJAWAB (wajib dijawab dengan ramah):
 - Informasi produk, harga, stok, kategori (joki, gift item)
 - Cara pesan, cara order, alur pembelian, langkah transaksi
-- Informasi game yang tersedia
+- Informasi game Roblox yang tersedia di toko
 - Pertanyaan seputar layanan ApengJers secara umum
 
 ATURAN WAJIB:
@@ -111,14 +114,16 @@ Format JSON yang harus dikembalikan:
   "orderType": "joki" atau "gift" atau null,
   "robloxUsername": "username yang disebutkan atau null",
   "targetDetails": "deskripsi target/tujuan joki atau null",
+  "itemName": "nama item/produk yang disebutkan atau null",
   "recipientUsername": "username penerima gift atau null",
   "notes": "catatan tambahan atau null"
 }
 
 Contoh:
-- "orderin joki rank diamond buat akun zidan123" → {"orderType":"joki","robloxUsername":"zidan123","targetDetails":"rank diamond","recipientUsername":null,"notes":null}
-- "mau gift item ke username apeng456" → {"orderType":"gift","robloxUsername":null,"targetDetails":null,"recipientUsername":"apeng456","notes":null}
-- "joki roblox username: myuser123 target: max level" → {"orderType":"joki","robloxUsername":"myuser123","targetDetails":"max level","recipientUsername":null,"notes":null}`;
+- "orderin joki rank diamond buat akun zidan123" → {"orderType":"joki","robloxUsername":"zidan123","targetDetails":"rank diamond","itemName":null,"recipientUsername":null,"notes":null}
+- "pesenin lochness monster ke username apeng456" → {"orderType":"gift","robloxUsername":null,"targetDetails":null,"itemName":"lochness monster","recipientUsername":"apeng456","notes":null}
+- "mau gift item lochness ke user myuser123" → {"orderType":"gift","robloxUsername":null,"targetDetails":null,"itemName":"lochness","recipientUsername":"myuser123","notes":null}
+- "joki roblox username: myuser123 target: max level" → {"orderType":"joki","robloxUsername":"myuser123","targetDetails":"max level","itemName":null,"recipientUsername":null,"notes":null}`;
 
     const groqRes = await axios.post(
       'https://api.groq.com/openai/v1/chat/completions',
