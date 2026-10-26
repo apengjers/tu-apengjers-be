@@ -12,6 +12,12 @@ const adminOnly = [passport.authenticate('jwt', { session: false }), requireAdmi
 router.post('/', orderController.createOrder);
 router.get('/track/:orderCode', orderController.trackOrder);
 router.get('/summary', ...adminOnly, orderController.getOrderSummary);
+
+// Route Konfigurasi Webhook Discord (Admin)
+router.get('/webhook-setting', ...adminOnly, orderController.getWebhookSetting);
+router.put('/webhook-setting', ...adminOnly, orderController.updateWebhookSetting);
+router.post('/webhook-setting/test', ...adminOnly, orderController.testWebhookSetting);
+
 router.get('/', ...adminOnly, orderController.getOrders);
 router.patch('/:id', ...adminOnly, orderController.updateOrder);
 
