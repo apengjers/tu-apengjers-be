@@ -87,6 +87,11 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// KIRIM GOOGLE CLIENT ID KE FRONTEND (client ID bukan secret, aman dikirim)
+router.get('/google/config', (req, res) => {
+  res.json({ clientId: process.env.GOOGLE_CLIENT_ID || null });
+});
+
 // LOGIN / DAFTAR DENGAN GOOGLE (Google Identity Services -> ID token)
 router.post('/google', async (req, res) => {
   try {

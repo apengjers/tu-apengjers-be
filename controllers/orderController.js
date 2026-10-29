@@ -57,6 +57,7 @@ exports.createOrder = async (req, res) => {
     }
 
     const order = await Order.create({
+      user: req.user?._id,
       orderCode: `AJ-${crypto.randomBytes(16).toString('hex').toUpperCase()}`,
       jenis,
       product: product._id,
@@ -161,5 +162,75 @@ exports.trackOrder = async (req, res) => {
     res.json(order);
   } catch (error) {
     res.status(500).json({ message: 'Status order gagal dimuat', error: error.message });
+  }
+};
+
+// ---- Riwayat transaksi milik user yang login ----
+const TAB_FILTERS = {
+  'menunggu-pembayaran': { paymentStatus: 'unpaid', status: { $in: ['new', 'confirmed', 'processing'] } },
+  'menunggu-dikirim': { paymentStatus: 'paid', status: { $in: ['new', 'confirmed'] } },
+  'sudah-terkirim': { paymentStatus: 'paid', status: 'processing' },
+  selesai: { status: 'completed' },
+  dibatalkan: { status: 'cancelled' },
+};
+
+// Order lama (belum punya field user) dicocokkan lewat email kontak
+const ownerFilter = (user) => ({
+  $or: [{ user: user._id }, { user: { $exists: false }, contactEmail: user.email }],
+});
+
+exports.getMyOrders = async (req, res) => {
+  try {
+    const { tab } = req.query;
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 50);
+
+    const filter = { $and: [ownerFilter(req.user)] };
+    if (tab) {
+      if (!TAB_FILTERS[tab]) return res.status(400).json({ message: 'Tab tidak valid' });
+      filter.$and.push(TAB_FILTERS[tab]);
+    }
+
+    const [orders, total] = await Promise.all([
+      Order.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .select('-user -notes -stockReserved')
+        .lean(),
+      Order.countDocuments(filter),
+    ]);
+
+    res.json({ orders, total, page, pages: Math.ceil(total / limit) });
+  } catch (error) {
+    console.error('Gagal memuat riwayat order:', error);
+    res.status(500).json({ message: 'Riwayat transaksi gagal dimuat' });
+  }
+};
+
+exports.getMyOrderCounts = async (req, res) => {
+  try {
+    const owner = ownerFilter(req.user);
+    const entries = await Promise.all(
+      Object.entries(TAB_FILTERS).map(async ([tab, f]) => [
+        tab,
+        await Order.countDocuments({ $and: [owner, f] }),
+      ]),
+    );
+    res.json(Object.fromEntries(entries));
+  } catch (error) {
+    res.status(500).json({ message: 'Ringkasan riwayat gagal dimuat' });
+  }
+};
+
+exports.getMyOrder = async (req, res) => {
+  try {
+    const order = await Order.findOne({
+      $and: [ownerFilter(req.user), { orderCode: String(req.params.orderCode).toUpperCase() }],
+    }).select('-user -stockReserved').lean();
+    if (!order) return res.status(404).json({ message: 'Order tidak ditemukan' });
+    res.json(order);
+  } catch (error) {
+    res.status(500).json({ message: 'Detail order gagal dimuat' });
   }
 };
