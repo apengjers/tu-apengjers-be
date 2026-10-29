@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const orderSchema = new mongoose.Schema({
   orderCode: { type: String, required: true, unique: true, index: true },
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
   jenis: { type: String, enum: ['joki', 'gift'], required: true },
   product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
   game: { type: mongoose.Schema.Types.ObjectId, ref: 'Game' },

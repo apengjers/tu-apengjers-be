@@ -13,6 +13,7 @@ const userSchema = new mongoose.Schema({
   googleId: { type: String, unique: true, sparse: true },
   role: { type: String, default: 'user' },
   photo: { type: String },
+  phone: { type: String, default: '', trim: true },
   resetPasswordToken: { type: String },
   resetPasswordExpires: { type: Date },
 });

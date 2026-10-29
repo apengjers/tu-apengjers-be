@@ -27,6 +27,7 @@ const gameRoutes = require('./routes/gameRoutes');
 const chatRoutes = require('./routes/chatRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const carouselRoutes = require('./routes/carouselRoutes');
+const userRoutes = require('./routes/userRoutes');
 
 app.use('/auth', authRoutes);
 app.use('/api', paymentRoutes);
@@ -36,6 +37,7 @@ app.use('/api/games', gameRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/carousel', carouselRoutes);
+app.use('/api/users', userRoutes);
 
 // Start server
 app.listen(PORT, () => {
