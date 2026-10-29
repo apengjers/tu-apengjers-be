@@ -17,7 +17,7 @@ npm install
 node server.js
 ```
 
-Backend berjalan di `http://localhost:3001`. Frontend lokal menggunakan `http://localhost:5173` sesuai konfigurasi CORS saat ini.
+Backend berjalan di `http://localhost:3001`. Frontend tidak memerlukan `.env`; Vite meneruskan permintaan `/api` dan `/auth` ke alamat pada `API_PROXY_TARGET` di `.env` backend (default `http://localhost:3001`). `FRONTEND_URL` dipakai untuk CORS dan tautan pembayaran.
 
 ## Environment
 
@@ -26,8 +26,11 @@ Salin `.env.example` menjadi `.env` di folder backend, isi nilai dari layanan te
 ```env
 PORT=3001
 NODE_ENV=development
+API_PROXY_TARGET=http://localhost:3001
+FRONTEND_URL=http://localhost:5173
 MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>/<database>?retryWrites=true&w=majority
 JWT_SECRET=<secret-random-yang-panjang>
+GOOGLE_CLIENT_ID=<google-oauth-client-id>
 MIDTRANS_SERVER_KEY=<server-key-sandbox>
 MIDTRANS_CLIENT_KEY=<client-key-sandbox>
 CLOUDINARY_CLOUD_NAME=<cloud-name>
@@ -45,6 +48,8 @@ DNS_SERVERS=1.1.1.1,8.8.8.8
 ```
 
 Setelah mengubah `.env`, restart backend.
+
+Frontend membaca `API_PROXY_TARGET` dari `.env` di folder backend saat Vite berjalan. Untuk memakai ngrok, cukup buka tunnel ke port `5173`; Vite akan meneruskan API ke backend lokal. `FRONTEND_URL` tetap perlu disesuaikan ke URL frontend publik untuk tautan pembayaran dan proses yang kembali ke website.
 
 ## Endpoint
 
