@@ -3,12 +3,10 @@ const mongoose = require('mongoose');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const Setting = require('../models/Setting');
-const {
-  sendDiscordOrderNotification,
-  sendDiscordStockNotification,
-} = require('../services/discordWebhookService');
 const { PAYMENT_CHANNELS } = require('../services/midtransService');
 const { encryptPassword, decryptPassword, normalizeWhatsapp } = require('../services/orderCredentials');
+const voucherController = require('./voucherController');
+const VoucherUsage = require('../models/VoucherUsage');
 
 const allowedStatuses = {
   new: ['confirmed', 'cancelled'],
@@ -21,7 +19,7 @@ const allowedStatuses = {
 exports.createOrder = async (req, res) => {
   let reservedStock = false;
   let reservedProductId = null;
-  let reservedProduct = null;
+  let reservedVoucherUsage = null;
 
   try {
     const {
@@ -36,6 +34,7 @@ exports.createOrder = async (req, res) => {
       notes,
       requestedPaymentMethod,
       paymentChannel,
+      voucherCode,
     } = req.body;
 
     const quantity = Number(rawQuantity);
@@ -59,6 +58,9 @@ exports.createOrder = async (req, res) => {
     const product = await Product.findOne({ _id: productId, jenis }).populate('game');
     if (!product) return res.status(404).json({ message: 'Produk tidak ditemukan atau tidak tersedia' });
 
+    const subtotalPrice = product.harga * quantity;
+    const voucher = await voucherController.findValidForSubtotal(voucherCode, subtotalPrice, product, normalizedWhatsapp, req.user?._id);
+
     if (product.stok > 0) {
       const reserved = await Product.findOneAndUpdate(
         { _id: product._id, stok: { $gte: quantity } },
@@ -68,13 +70,28 @@ exports.createOrder = async (req, res) => {
       if (!reserved) return res.status(409).json({ message: 'Stok tidak cukup untuk jumlah tersebut' });
       reservedStock = true;
       reservedProductId = product._id;
-      reservedProduct = reserved;
     } else if (jenis === 'gift') {
       return res.status(409).json({ message: 'Gift sedang habis' });
     }
 
     const paymentGroup = Object.keys(PAYMENT_CHANNELS).includes(requestedPaymentMethod) ? requestedPaymentMethod : undefined;
     const channel = paymentGroup && PAYMENT_CHANNELS[paymentGroup].includes(paymentChannel) ? paymentChannel : '';
+    if (voucher.voucherId && voucher.oneUsePerUser) {
+      try {
+        reservedVoucherUsage = await VoucherUsage.create({
+          voucher: voucher.voucherId,
+          identity: voucher.identities.phoneIdentity,
+          userIdentity: voucher.identities.userIdentity || undefined,
+          orderCode,
+        });
+      } catch (error) {
+        if (error.code === 11000) {
+          error.status = 409;
+          error.message = 'Voucher hanya dapat digunakan 1x per user.';
+        }
+        throw error;
+      }
+    }
 
     const order = await Order.create({
       user: req.user?._id,
@@ -86,7 +103,10 @@ exports.createOrder = async (req, res) => {
       gameName: product.game?.nama || '',
       quantity,
       unitPrice: product.harga,
-      totalPrice: product.harga * quantity,
+      subtotalPrice,
+      voucherCode: voucher.voucherCode,
+      discountAmount: voucher.discountAmount,
+      totalPrice: subtotalPrice - voucher.discountAmount,
       robloxUsername: String(robloxUsername || '').trim(),
       robloxPasswordEncrypted,
       recipientUsername: String(recipientUsername || '').trim(),
@@ -97,14 +117,6 @@ exports.createOrder = async (req, res) => {
       paymentChannel: channel,
       stockReserved: reservedStock,
     });
-
-    // Trigger Discord Webhook (non-blocking agar tidak memperlambat response ke buyer)
-    sendDiscordOrderNotification(order, 'ORDER_CREATED');
-
-    // Notif stok habis (hanya kalau stok baru saja jadi 0 karena order ini)
-    if (reservedProduct && reservedProduct.stok === 0) {
-      sendDiscordStockNotification(reservedProduct);
-    }
 
     res.status(201).json({
       order: {
@@ -124,8 +136,9 @@ exports.createOrder = async (req, res) => {
     if (reservedStock && reservedProductId) {
       await Product.updateOne({ _id: reservedProductId }, { $inc: { stok: Number(req.body.quantity) || 0 } }).catch(() => {});
     }
+    if (reservedVoucherUsage) await VoucherUsage.deleteOne({ _id: reservedVoucherUsage._id }).catch(() => {});
     console.error('Gagal membuat order:', error.name); // Never log validation payloads containing credentials.
-    res.status(500).json({ message: 'Order belum berhasil disimpan' });
+    res.status(error.status || 500).json({ message: error.status ? error.message : 'Order belum berhasil disimpan' });
   }
 };
 
@@ -179,7 +192,6 @@ exports.updateOrder = async (req, res) => {
     if (!order) return res.status(404).json({ message: 'Order tidak ditemukan' });
 
     const { status, paymentStatus } = req.body;
-    let isChanged = false;
 
     if (status && status !== order.status) {
       if (!allowedStatuses[order.status]?.includes(status)) return res.status(409).json({ message: 'Perubahan status order tidak valid' });
@@ -188,20 +200,17 @@ exports.updateOrder = async (req, res) => {
         order.stockReserved = false;
       }
       order.status = status;
-      isChanged = true;
     }
     if (paymentStatus && paymentStatus !== order.paymentStatus) {
       if (!['unpaid', 'paid', 'refunded'].includes(paymentStatus)) return res.status(400).json({ message: 'Status pembayaran tidak valid' });
       order.paymentStatus = paymentStatus;
-      isChanged = true;
     }
     if (['completed', 'cancelled'].includes(order.status)) order.robloxPasswordEncrypted = undefined;
     await order.save();
 
-    if (isChanged) {
-      sendDiscordOrderNotification(order, 'ORDER_UPDATED');
+    if (status === 'cancelled' && order.voucherCode) {
+      await VoucherUsage.deleteOne({ orderCode: order.orderCode }).catch((error) => console.error('Gagal melepas voucher order:', error));
     }
-
     res.json(order);
   } catch (error) {
     res.status(500).json({ message: 'Order gagal diperbarui', error: error.message });
@@ -211,7 +220,7 @@ exports.updateOrder = async (req, res) => {
 exports.trackOrder = async (req, res) => {
   try {
     const order = await Order.findOne({ orderCode: req.params.orderCode.toUpperCase() })
-      .select('orderCode jenis productName gameName quantity totalPrice status paymentStatus createdAt updatedAt');
+      .select('orderCode jenis productName gameName quantity subtotalPrice voucherCode discountAmount totalPrice status paymentStatus createdAt updatedAt');
     if (!order) return res.status(404).json({ message: 'Order tidak ditemukan' });
     res.json(order);
   } catch (error) {
@@ -240,9 +249,7 @@ exports.getWebhookSetting = async (_req, res) => {
       webhookUrl,
       emailChat: val.emailChat ?? true,
       emailEmptyStock: val.emailEmptyStock ?? true,
-      discordNewOrder: val.discordNewOrder ?? true,
-      discordOrderIssue: val.discordOrderIssue ?? true,
-      discordEmptyStock: val.discordEmptyStock ?? true,
+      discordPaymentReceived: val.discordPaymentReceived ?? true,
       discordChat: val.discordChat ?? false,
     });
   } catch (error) {
@@ -262,9 +269,7 @@ exports.updateWebhookSetting = async (req, res) => {
       webhookUrl,
       emailChat: Boolean(req.body.emailChat ?? true),
       emailEmptyStock: Boolean(req.body.emailEmptyStock ?? true),
-      discordNewOrder: Boolean(req.body.discordNewOrder ?? true),
-      discordOrderIssue: Boolean(req.body.discordOrderIssue ?? true),
-      discordEmptyStock: Boolean(req.body.discordEmptyStock ?? true),
+      discordPaymentReceived: Boolean(req.body.discordPaymentReceived ?? true),
       discordChat: Boolean(req.body.discordChat ?? false),
     };
 
@@ -290,15 +295,14 @@ exports.testWebhookSetting = async (req, res) => {
       return res.status(400).json({ message: 'Masukkan URL Discord Webhook yang valid terlebih dahulu' });
     }
 
-    const sampleContent = [
-      `@everyone Halo **APENGJERS** berikut data pesanan terbaru untuk toko kamu:`,
-      `* Pesanan baru masuk [AJ-TEST123456](http://localhost:5173/cek-transaksi) JOKI TREADMILL 1 JAM Joki Break and Steal an Egg`,
-    ].join('\n');
+    const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+    const sampleUrl = `${frontendUrl}/cek-transaksi?orderCode=AJ-TEST123456`;
+    const sampleContent = `@everyone Halo APENGJERS, pembayaran pesanan sudah diterima! Nomor Pesanan: [AJ-TEST123456](<${sampleUrl}>) | Produk: JOKI TREADMILL 1 JAM Break and Steal an Egg | Total: Rp 5.000 | Metode: bank_transfer | Pembeli: apengjers`;
 
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: sampleContent }),
+      body: JSON.stringify({ content: sampleContent, allowed_mentions: { parse: ['everyone'] } }),
     });
 
     if (!response.ok) {

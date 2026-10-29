@@ -1,6 +1,7 @@
 const express = require('express');
 const passport = require('passport');
 const orderController = require('../controllers/orderController');
+const optionalJwt = require('../middleware/optionalJwt');
 
 const router = express.Router();
 const requireAdmin = (req, res, next) => {
@@ -17,7 +18,7 @@ const optionalAuth = (req, res, next) => {
 };
 const adminOnly = [jwtAuth, requireAdmin];
 
-router.post('/', optionalAuth, orderController.createOrder);
+router.post('/', optionalJwt, orderController.createOrder);
 router.get('/mine', jwtAuth, orderController.getMyOrders);
 router.get('/mine/counts', jwtAuth, orderController.getMyOrderCounts);
 router.get('/mine/:orderCode', jwtAuth, orderController.getMyOrder);

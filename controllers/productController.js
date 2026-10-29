@@ -1,6 +1,5 @@
 const Product = require('../models/Product');
 const Game = require('../models/Game');
-const { sendDiscordStockNotification } = require('../services/discordWebhookService');
 
 const validateCatalogGame = async (body, res) => {
   if (!['joki', 'gift'].includes(body.jenis)) return true;
@@ -19,11 +18,6 @@ exports.createProduct = async (req, res) => {
     if (!(await validateCatalogGame(req.body, res))) return;
     const product = new Product(req.body);
     await product.save();
-
-    // Trigger webhook kalau dibuat langsung dengan stok 0
-    if (Number(product.stok) === 0) {
-      await sendDiscordStockNotification(product);
-    }
 
     res.json(product);
   } catch (err) {
@@ -63,11 +57,6 @@ exports.updateProduct = async (req, res) => {
     
     const updated = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
     if (!updated) return res.status(404).json({ message: 'Not found' });
-
-    // Panggil webhook Discord kalau stok produk berubah jadi 0
-    if (Number(updated.stok) === 0) {
-      await sendDiscordStockNotification(updated);
-    }
 
     res.json(updated);
   } catch (err) {

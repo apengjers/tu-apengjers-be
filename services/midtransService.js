@@ -57,7 +57,7 @@ exports.createSnapTransaction = async (order) => {
     expiry: { unit: 'minutes', duration: PAYMENT_EXPIRY_MINUTES },
     ...(channels ? { enabled_payments: channels } : {}),
     // Setelah bayar, Midtrans mengembalikan buyer ke sini (+ query order_id, status_code, transaction_status)
-    callbacks: { finish: `${FRONTEND_URL}/cek-transaksi` },
+    callbacks: { finish: `${FRONTEND_URL}/cek-transaksi?orderCode=${encodeURIComponent(order.orderCode)}` },
   };
 
   console.log(`[Midtrans] ${order.orderCode} enabled_payments:`, channels ? channels.join(', ') : 'semua');

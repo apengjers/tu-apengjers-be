@@ -43,7 +43,6 @@ async function cancelUnpaid(order) {
     await Product.updateOne({ _id: before.product }, { $inc: { stok: before.quantity } });
   }
   const fresh = await Order.findById(order._id);
-  sendDiscordOrderNotification(fresh, 'ORDER_UPDATED');
   return fresh;
 }
 
