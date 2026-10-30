@@ -12,7 +12,15 @@ const PORT = process.env.PORT || 3001;
 
 
 app.use(cors({
-  origin: (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, ''),
+  origin: (origin, callback) => {
+    const allowed = [
+      'http://localhost:5173',
+      'http://localhost:5174',
+      process.env.FRONTEND_URL,
+    ].filter(Boolean).map(u => u.replace(/\/$/, ''));
+    if (!origin || allowed.includes(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
 }));
 app.use(express.json());
@@ -25,6 +33,7 @@ const productRoutes = require('./routes/productRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
 const gameRoutes = require('./routes/gameRoutes');
 const chatRoutes = require('./routes/chatRoutes');
+const adminChatRoutes = require('./routes/adminChatRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const carouselRoutes = require('./routes/carouselRoutes');
 const userRoutes = require('./routes/userRoutes');
@@ -36,6 +45,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/games', gameRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/admin-chat', adminChatRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/carousel', carouselRoutes);
 app.use('/api/users', userRoutes);
